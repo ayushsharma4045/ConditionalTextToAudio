@@ -70,20 +70,24 @@ def register():
             return redirect(url_for('login'))
     return render_template('register.html')
 
+
 @app.route('/generate_audio', methods=['GET', 'POST'])
 @login_required
 def generate_audio():
     if request.method == 'POST':
         description = request.form['description']
         
-        output_filename = f'generated_audio_{current_user.id}_{int(time.time())}'
-        output_file = os.path.join(UPLOAD_FOLDER, output_filename)
+        output_filename = f'generated_audio_{current_user.id}_{int(time.time())}'  # Removed .wav here
+        output_path = os.path.join(UPLOAD_FOLDER, output_filename)  # No .wav extension
 
         # Generate music
         wav = model.generate([description])
-        audio_write(output_file, wav[0], model.sample_rate, format='wav')
+        audio_write(output_path, wav[0], model.sample_rate, format='wav')  # This will add .wav
 
-        return render_template('generate.html', audio_file=f'{output_filename}.wav')
+        # Store the correct filename in session
+        session['generated_audio'] = f"{output_filename}.wav"
+
+        return render_template('generate.html', audio_file=session['generated_audio'])
 
     return render_template('generate.html', audio_file=None)
 
@@ -96,9 +100,17 @@ def logout():
 @app.route('/download', methods=['GET'])
 @login_required
 def download():
-    # Get the most recently generated audio file for the current user
-    file_name = f'generated_audio_{current_user.id}.wav'
+    file_name = session.get('generated_audio')  # Retrieve the correct filename
+    if not file_name:
+        flash('No audio file found. Please generate audio first.')
+        return redirect(url_for('generate_audio'))
+    
     file_path = os.path.join(UPLOAD_FOLDER, file_name)
+    
+    if not os.path.exists(file_path):
+        flash('Audio file not found. Please generate audio again.')
+        return redirect(url_for('generate_audio'))
+    
     return send_file(file_path, as_attachment=True)
 
 if __name__ == '__main__':
